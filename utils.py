@@ -36,30 +36,18 @@ def fetch_ohlcv():
     return df
 
 def calculate_indicators(df):
-    send_telegram("Calculate indicators")
-    EMA_FAST = int(os.getenv('EMA_FAST', 20))
-    df['EMA_FAST'] = df['close'].ewm(span=EMA_FAST).mean()
-    EMA_SLOW = int(os.getenv('EMA_SLOW', 50))
-    df['EMA_SLOW'] = df['close'].ewm(span=EMA_SLOW).mean()
-    delta = df['close'].diff()
-    gain = delta.where(delta > 0, 0).rolling(window=14).mean()
-    loss = -delta.where(delta < 0, 0).rolling(window=14).mean()
-    rs = gain / loss
-    df['RSI'] = 100 - (100 / (1 + rs))
-    dm = ((df['high'] + df['low']) / 2).diff()
-    br = df['volume'] / (df['high'] - df['low']).replace(0, 1)
-    df['EMV'] = dm / br
-    df['EMV'] = df['EMV'].rolling(window=14).mean()
+    df['EMA20'] = df['close'].ewm(span=20).mean()
+    df['EMA50'] = df['close'].ewm(span=50).mean()
     return df
 
 def decide_trade(df):
-    send_telegram("Decide Trade")
     latest = df.iloc[-1]
-    if latest['RSI'] < 30 and latest['EMA_FAST'] > latest['EMA_SLOW'] and latest['EMV'] > 0:
+    if latest['EMA20'] > latest['EMA50']:
         return 'long'
-    elif latest['RSI'] > 70 and latest['EMA_FAST'] < latest['EMA_SLOW'] and latest['EMV'] < 0:
+    elif latest['EMA20'] < latest['EMA50']:
         return 'short'
     return None
+
 
 def place_order(direction):
     send_telegram("Place Order")
@@ -77,12 +65,32 @@ def place_order(direction):
 
 def format_signal_explanation(df):
     latest = df.iloc[-1]
+    ema20 = latest['EMA20']
+    ema50 = latest['EMA50']
+
+    tendance = ""
+    interpretation = ""
+
+    if ema20 > ema50:
+        tendance = "📈 La moyenne mobile courte (EMA20) est au-dessus de la longue (EMA50)."
+        interpretation = "Cela indique une dynamique haussière. Le bot pourrait envisager une position LONG (achat)."
+    elif ema20 < ema50:
+        tendance = "📉 La moyenne mobile courte (EMA20) est en dessous de la longue (EMA50)."
+        interpretation = "Cela reflète une dynamique baissière. Le bot pourrait envisager une position SHORT (vente)."
+    else:
+        tendance = "➖ Les deux moyennes sont égales."
+        interpretation = "Il n'y a pas de signal clair. Le bot reste en attente."
+
     return f"""
-RSI : {latest['RSI']}
-EMA_FAST : {latest['EMA_FAST']}
-EMA_SLOW : {latest['EMA_SLOW']}
-EMV : {latest['EMV']}
+📊 Analyse des moyennes mobiles :
+
+- EMA20 (court terme) : {ema20:.2f}
+- EMA50 (long terme) : {ema50:.2f}
+
+{tendance}
+{interpretation}
 """
+
 
 
 def check_profit(entry_price, direction):
