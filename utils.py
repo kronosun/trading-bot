@@ -60,10 +60,11 @@ def place_order(direction):
         qty = round((amount_usdt * leverage) / market_price, 6)
         params = {'leverage': leverage}
 
-        send_telegram("📤 Place Order")
-        send_telegram(f"⚠️ ATTENTION : Levier utilisé = {leverage}x. Tu risques une liquidation plus rapide si le marché va dans le mauvais sens.")
+        send_telegram("📤 Placer un ordre")
+        ##send_telegram(f"⚠️ ATTENTION : Levier utilisé = {leverage}x. Tu risques une liquidation plus rapide si le marché va dans le mauvais sens.")
 
         if direction == 'long':
+            send_telegram(f"💵 Montant estimé de l’ordre : {amount_usdt:.2f} USDT → {qty:.6f} BTC à {market_price:.2f} USD")
             exchange.create_market_buy_order(symbol, qty, params)
         else:
             exchange.create_market_sell_order(symbol, qty, params)
