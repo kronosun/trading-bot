@@ -102,9 +102,7 @@ def run_bot():
     try:
         while True:
             try:
-                send_telegram("📥 Récupération des données...")
                 df = fetch_ohlcv()
-                send_telegram("📊 Calcul des indicateurs...")
                 df = calculate_indicators(df)
                 
                 
@@ -123,7 +121,10 @@ def run_bot():
                         send_telegram("📤 Placement d'un ordre réel...")
                         try:
                             entry_price, direction = place_order(signal)
-                            send_telegram(f"✅ Trade {direction.upper()} exécuté à {entry_price}")
+                            if not entry_price or not direction:
+                                send_telegram("⚠️ Le trade n’a pas été exécuté. Passage au cycle suivant.")
+                                return
+                            send_telegram(f"Trade {direction.upper()} exécuté à {entry_price}")
                             for _ in range(60):  # 60 minutes de suivi
                                 time.sleep(60)
                                 profit = check_profit(entry_price, direction)
