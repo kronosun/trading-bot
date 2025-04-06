@@ -48,19 +48,57 @@ def decide_trade(df):
         return 'short'
     return None
 
-
 def place_order(direction):
-    send_telegram("Place Order")
-    price = exchange.fetch_ticker(symbol)['last']
-    amount = usdt_amount / price
-    params = {'leverage': leverage}
-    send_telegram("Place Order")
+    try:
+        balance = exchange.fetch_balance()
+        usdt_balance = balance['USDT']['free']
+        leverage = int(os.getenv("LEVERAGE", 9))
+        trade_amount_usdt = float(os.getenv("TRADE_AMOUNT", 100))
+        amount_usdt = min(usdt_balance, trade_amount_usdt)
+
+        market_price = exchange.fetch_ticker(symbol)['last']
+        qty = round((amount_usdt * leverage) / market_price, 6)
+        params = {'leverage': leverage}
+
+        send_telegram("📤 Place Order")
+        send_telegram(f"⚠️ ATTENTION : Levier utilisé = {leverage}x. Tu risques une liquidation plus rapide si le marché va dans le mauvais sens.")
+
+        if direction == 'long':
+            exchange.create_market_buy_order(symbol, qty, params)
+        else:
+            exchange.create_market_sell_order(symbol, qty, params)
+
+        send_telegram(f"{direction.upper()} position ouverte à {market_price}")
+        return market_price, direction
+
+    except Exception as e:
+        send_telegram(f"❌ Erreur place_order : {e}")
+        return None, None
+
+
+def check_profit(entry_price, direction):
+    TP_PERCENT = float(os.getenv("TP_PERCENT", 2.0))
+    SL_PERCENT = float(os.getenv("SL_PERCENT", 1.0))
+
+    current_price = exchange.fetch_ticker(symbol)['last']
     if direction == 'long':
-        exchange.create_market_buy_order(symbol, amount, params)
+        profit_percent = ((current_price - entry_price) / entry_price) * 100
     else:
-        exchange.create_market_sell_order(symbol, amount, params)
-    send_telegram(f"{direction.upper()} position ouverte à {price}")
-    return price, direction
+        profit_percent = ((entry_price - current_price) / entry_price) * 100
+
+    send_telegram(f"📉 Variation actuelle : {profit_percent:.2f}%")
+
+    if profit_percent >= TP_PERCENT:
+        send_telegram(f"[TAKE PROFIT] +{profit_percent:.2f}% ✅")
+        log_trade(direction, entry_price, profit_percent)
+        return 'tp'
+
+    elif profit_percent <= -SL_PERCENT:
+        send_telegram(f"[STOP LOSS] {profit_percent:.2f}% ❌")
+        log_trade(direction, entry_price, profit_percent)
+        return 'sl'
+
+    return None
 
 
 def format_signal_explanation(df):
@@ -91,57 +129,6 @@ def format_signal_explanation(df):
 {interpretation}
 """
 
-
-
-def check_profit(entry_price, direction):
-    TP_PERCENT = float(os.getenv("TP_PERCENT", 1.5))  # objectif de gain
-    SL_PERCENT = float(os.getenv("SL_PERCENT", 1.0))  # stop loss
-
-    current_price = exchange.fetch_ticker(symbol)['last']
-    if direction == 'long':
-        profit_percent = ((current_price - entry_price) / entry_price) * 100
-    else:
-        profit_percent = ((entry_price - current_price) / entry_price) * 100
-
-    send_telegram(f"📉 Variation actuelle : {profit_percent:.2f}%")
-
-    if profit_percent >= TP_PERCENT:
-        send_telegram(f"🎯 Objectif de gain atteint : +{profit_percent:.2f}% ✅")
-    elif profit_percent <= -SL_PERCENT:
-        send_telegram(f"🛑 Limite de perte atteinte : {profit_percent:.2f}% ❌")
-
-    return profit_percent
-
-    if direction == 'long':
-        profit_percent = ((current_price - entry_price) / entry_price) * 100
-    else:
-        profit_percent = ((entry_price - current_price) / entry_price) * 100
-
-    # Affiche uniquement le pourcentage de variation
-    send_telegram(f"📉 Variation actuelle : {profit_percent:.2f}%")
-
-    return profit_percent
-
-    SL_PERCENT = float(os.getenv("SL_PERCENT", 1.0))  # 1.0% par défaut
-
-    current_price = exchange.fetch_ticker(symbol)['last']
-    if direction == 'long':
-        profit_percent = ((current_price - entry_price) / entry_price) * 100
-    else:
-        profit_percent = ((entry_price - current_price) / entry_price) * 100
-
-    # Affichage dans les logs (Telegram ou fichier selon DEBUG)
-    send_telegram(f"📉 Variation actuelle : {profit_percent:.2f}%")
-
-    # Vérifie si le TP ou le SL est atteint
-    if profit_percent >= TP_PERCENT:
-        send_telegram(f"🎯 Objectif TP atteint ({profit_percent:.2f}%) ✅")
-    elif profit_percent <= -SL_PERCENT:
-        send_telegram(f"🛑 Stop Loss atteint ({profit_percent:.2f}%) ❌")
-
-    return profit_percent
-
-    return (current_price - entry_price) / entry_price if direction == 'long' else (entry_price - current_price) / entry_price
 
 def log_trade(direction, entry_price, profit):
     with open("trades_log.csv", "a") as file:
