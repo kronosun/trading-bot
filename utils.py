@@ -50,6 +50,10 @@ def decide_trade(df):
 
 def place_order(direction):
     try:
+        # Chargement du marché pour obtenir la limite minimale
+        markets = exchange.load_markets()
+        min_qty = markets[symbol]['limits']['amount']['min']
+
         balance = exchange.fetch_balance()
         usdt_balance = balance['USDT']['free']
         leverage = int(os.getenv("LEVERAGE", 9))
@@ -58,13 +62,20 @@ def place_order(direction):
 
         market_price = exchange.fetch_ticker(symbol)['last']
         qty = round((amount_usdt * leverage) / market_price, 6)
+
+        # Assure un minimum requis par la plateforme
+        if qty < min_qty:
+            send_telegram(f"❌ Quantité {qty:.6f} inférieure au minimum autorisé {min_qty} pour {symbol}")
+            return None, None
+
         params = {'leverage': leverage}
 
-        send_telegram("📤 Placer un ordre")
-        ##send_telegram(f"⚠️ ATTENTION : Levier utilisé = {leverage}x. Tu risques une liquidation plus rapide si le marché va dans le mauvais sens.")
+        send_telegram("📤 Place Order")
+        send_telegram(f"⚠️ ATTENTION : Levier utilisé = {leverage}x. Tu risques une liquidation plus rapide si le marché va dans le mauvais sens.")
+        send_telegram(f"💵 Montant estimé de l’ordre : {amount_usdt:.2f} USDT → {qty:.6f} {symbol.split('/')[0]} à {market_price:.2f} USD")
+        send_telegram(f"ℹ️ Quantité minimale autorisée : {min_qty}")
 
         if direction == 'long':
-            send_telegram(f"💵 Montant estimé de l’ordre : {amount_usdt:.2f} USDT → {qty:.6f} BTC à {market_price:.2f} USD")
             exchange.create_market_buy_order(symbol, qty, params)
         else:
             exchange.create_market_sell_order(symbol, qty, params)
