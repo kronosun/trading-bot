@@ -123,7 +123,7 @@ def run_bot():
                             entry_price, direction = place_order(signal)
                             if not entry_price or not direction:
                                 send_telegram("⚠️ Le trade n’a pas été exécuté. Passage au cycle suivant.")
-                                return
+                                continue
                             send_telegram(f"Trade {direction.upper()} exécuté à {entry_price}")
                             for _ in range(60):  # 60 minutes de suivi
                                 time.sleep(60)
