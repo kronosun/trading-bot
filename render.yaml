@@ -1,0 +1,10 @@
+
+services:
+  - type: worker
+    name: trading-bot
+    env: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python bot_v3.py
+    envVars:
+      - fromDotEnv: true
