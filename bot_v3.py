@@ -71,10 +71,8 @@ def signal_command(update: Update, context: CallbackContext):
 
 from utils import (
     fetch_ohlcv, calculate_indicators, decide_trade,
-    place_order, check_profit, send_telegram, log_trade,
-    format_signal_explanation, exchange  # 👈 ajoute ceci
+    place_order, check_profit, send_telegram, log_trade, format_signal_explanation
 )
-
 
 LOCKFILE = "bot.lock"
 
@@ -114,20 +112,27 @@ def run_bot():
                 explanation = format_signal_explanation(df)
                 send_telegram(f"📊 Analyse complète :\n\n{explanation}")
 
+                
                 if signal:
+                    explanation = format_signal_explanation(df)
+                    send_telegram(f"📊 Analyse complète :\n\n{explanation}")
+
                     if DEBUG:
                         send_telegram(f"🔧 DEBUG : Simulation de trade {signal.upper()}")
                     else:
-                        entry_price, direction = place_order(signal)
-                        send_telegram(f"✅ Trade {direction.upper()} exécuté à {entry_price}")
-                        for _ in range(60):  # Vérification pendant 1h
-                            time.sleep(60)
-                            profit = check_profit(entry_price, direction)
-                            send_telegram(f"💰 Profit actuel : {profit:.2f}")
-                            log_trade(entry_price, profit, direction)
+                        send_telegram("📤 Placement d'un ordre réel...")
+                        try:
+                            entry_price, direction = place_order(signal)
+                            send_telegram(f"✅ Trade {direction.upper()} exécuté à {entry_price}")
+                            for _ in range(60):  # 60 minutes de suivi
+                                time.sleep(60)
+                                profit = check_profit(entry_price, direction)
+                                send_telegram(f"💰 Profit actuel : {profit:.2f}%")
+                                log_trade(entry_price, profit, direction)
+                        except Exception as e:
+                            send_telegram(f"❌ Erreur place_order : {e}")
                 else:
-                    send_telegram("❌ Aucun trade effectué (pas de signal valide).")
-
+                    send_telegram("❌ Aucun signal valide pour ce cycle.")
 
             except Exception as e:
                 send_telegram(f"❌ Erreur pendant l'exécution : {str(e)}")
