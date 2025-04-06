@@ -71,7 +71,7 @@ def signal_command(update: Update, context: CallbackContext):
 
 from utils import (
     fetch_ohlcv, calculate_indicators, decide_trade,
-    place_order, check_profit, send_telegram, log_trade, format_signal_explanation
+    place_order, check_profit, send_telegram, log_trade, format_signal_explanation, exchange
 )
 
 LOCKFILE = "bot.lock"
