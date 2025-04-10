@@ -13,15 +13,15 @@ TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
 
-exchange = ccxt.bybit({
+exchange = ccxt.coinex({
     'apiKey': API_KEY,
     'secret': API_SECRET,
     'enableRateLimit': True
 })
 
 symbol = 'BTC/USDT'
-leverage = 9
-usdt_amount = 100
+leverage = int(os.getenv("LEVERAGE", 9))
+usdt_amount = os.getenv("TRADE_AMOUNT", 100)
 timeframe = '1h'
 
 def send_telegram(message):
@@ -51,8 +51,8 @@ def decide_trade(df):
 def place_order(direction):
     try:
         # Chargement du marché pour obtenir la limite minimale
-        markets = exchange.load_markets()
-        min_qty = markets[symbol]['limits']['amount']['min']
+        # markets = exchange.load_markets()
+        # min_qty = markets[symbol]['limits']['amount']['min']
 
         balance = exchange.fetch_balance()
         usdt_balance = balance['USDT']['free']
@@ -61,23 +61,25 @@ def place_order(direction):
         amount_usdt = min(usdt_balance, trade_amount_usdt)
 
         market_price = exchange.fetch_ticker(symbol)['last']
-        qty = round((amount_usdt * leverage) / market_price, 6)
+        #qty = round((amount_usdt * leverage) / market_price, 6)
 
         # Assure un minimum requis par la plateforme
-        if qty < min_qty:
-            send_telegram(f"❌ Quantité {qty:.6f} inférieure au minimum autorisé {min_qty} pour {symbol}")
-            return None, None
+        #if qty < min_qty:
+        #    send_telegram(f"❌ Quantité {qty:.6f} inférieure au minimum autorisé {min_qty} pour {symbol}")
+        #    return None, None
 
         params = {'leverage': leverage}
-
+        qty = amount_usdt / market_price
         send_telegram("📤 Place Order")
-        send_telegram(f"⚠️ ATTENTION : Levier utilisé = {leverage}x. Tu risques une liquidation plus rapide si le marché va dans le mauvais sens.")
-        send_telegram(f"💵 Montant estimé de l’ordre : {amount_usdt:.2f} USDT → {qty:.6f} {symbol.split('/')[0]} à {market_price:.2f} USD")
-        send_telegram(f"ℹ️ Quantité minimale autorisée : {min_qty}")
+        #send_telegram(f"⚠️ ATTENTION : Levier utilisé = {leverage}x. Tu risques une liquidation plus rapide si le marché va dans le mauvais sens.")
+        #send_telegram(f"💵 Montant estimé de l’ordre : {amount_usdt:.2f} USDT → {qty:.6f} {symbol.split('/')[0]} à {market_price:.2f} USD")
+        ##send_telegram(f"ℹ️ Quantité minimale autorisée : {min_qty}")
 
         if direction == 'long':
+            send_telegram("ℹ️ LONG Buy Order")
             exchange.create_market_buy_order(symbol, qty, params)
         else:
+            send_telegram("ℹ️ SHORT Sell Order")
             exchange.create_market_sell_order(symbol, qty, params)
 
         send_telegram(f"{direction.upper()} position ouverte à {market_price}")
