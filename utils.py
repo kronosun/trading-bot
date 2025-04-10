@@ -70,14 +70,16 @@ def place_order(direction):
 
         params = {'leverage': leverage}
         qty = amount_usdt / market_price
-        send_telegram("📤 Place Order")
         #send_telegram(f"⚠️ ATTENTION : Levier utilisé = {leverage}x. Tu risques une liquidation plus rapide si le marché va dans le mauvais sens.")
         #send_telegram(f"💵 Montant estimé de l’ordre : {amount_usdt:.2f} USDT → {qty:.6f} {symbol.split('/')[0]} à {market_price:.2f} USD")
-        ##send_telegram(f"ℹ️ Quantité minimale autorisée : {min_qty}")
+        ##send_telegram(f"ℹ️ Quantité minimale autorisée : {min_qty}")          
+        send_telegram("📤 Place Order [REEL]")
 
         if direction == 'long':
             send_telegram("ℹ️ LONG Buy Order")
-            exchange.create_market_buy_order(symbol, qty, params)
+            exchange.options['createMarketBuyOrderRequiresPrice'] = False
+            exchange.create_order(symbol, 'market', 'buy', amount_usdt, None, params)
+            #exchange.create_market_buy_order(symbol, qty, params)
         else:
             send_telegram("ℹ️ SHORT Sell Order")
             exchange.create_market_sell_order(symbol, qty, params)
