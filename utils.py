@@ -93,28 +93,21 @@ def place_order(direction):
 
 
 def check_profit(entry_price, direction):
-    TP_PERCENT = float(os.getenv("TP_PERCENT", 2.0))
-    SL_PERCENT = float(os.getenv("SL_PERCENT", 1.0))
+    try:
+        current_price = exchange.fetch_ticker(symbol)['last']
+        send_telegram(f"Prix actuel : {current_price}")
 
-    current_price = exchange.fetch_ticker(symbol)['last']
-    if direction == 'long':
-        profit_percent = ((current_price - entry_price) / entry_price) * 100
-    else:
-        profit_percent = ((entry_price - current_price) / entry_price) * 100
+        if direction == 'long':
+            profit_percent = ((current_price - entry_price) / entry_price) * 100
+        else:
+            profit_percent = ((entry_price - current_price) / entry_price) * 100
 
-    send_telegram(f"📉 Variation actuelle : {profit_percent:.2f}%")
-
-    if profit_percent >= TP_PERCENT:
-        send_telegram(f"[TAKE PROFIT] +{profit_percent:.2f}% ✅")
-        log_trade(direction, entry_price, profit_percent)
-        return 'tp'
-
-    elif profit_percent <= -SL_PERCENT:
-        send_telegram(f"[STOP LOSS] {profit_percent:.2f}% ❌")
-        log_trade(direction, entry_price, profit_percent)
-        return 'sl'
-
-    return None
+        send_telegram(f"📉 Variation actuelle : {profit_percent:.2f}%")
+        
+        return (current_price - entry_price) / entry_price if direction == 'long' else (entry_price - current_price) / entry_price
+    except Exception as e:
+        send_telegram(f"[ERREUR] check_profit: {e}")
+        return 0
 
 
 def format_signal_explanation(df):
