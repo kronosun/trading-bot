@@ -117,25 +117,31 @@ def run_bot():
                         send_telegram(f"🔧 DEBUG : Simulation de trade {signal.upper()}")
                     else:
                         send_telegram("📤 Placement d'un ordre réel...")
-                        
+
                         try:
                             entry_price, direction = place_order(signal)
                             if not entry_price or not direction:
                                 send_telegram("⚠️ Le trade n’a pas été exécuté. Passage au cycle suivant.")
                             else:
                                 send_telegram(f"Trade {direction.upper()} exécuté à {entry_price}")
+                                TP = float(os.getenv("TAKE_PROFIT", 0.02))
+                                SL = float(os.getenv("STOP_LOSS", 0.01))
 
-                                for _ in range(60):  # 60 minutes de suivi
+                                for _ in range(60):  # 60 minutes
                                     time.sleep(60)
                                     profit = check_profit(entry_price, direction)
-                                    if profit >= 0.02:
-                                        send_telegram(f"TP +{round(profit*100, 2)}%. Position fermée.")
+
+                                    if profit is not None and profit >= TP:
+                                        send_telegram(f"🎯 TP atteint (+{round(profit*100, 2)}%). Fermeture.")
+                                        close_position(direction)
                                         log_trade(direction, entry_price, profit)
                                         break
-                                    elif profit <= -0.01:
-                                        send_telegram(f"SL {round(profit*100, 2)}%. Position fermée.")
+                                    elif profit is not None and profit <= -SL:
+                                        send_telegram(f"🛑 SL atteint ({round(profit*100, 2)}%). Fermeture.")
+                                        close_position(direction)
                                         log_trade(direction, entry_price, profit)
                                         break
+
                                 send_telegram(f"💰 Profit actuel : {profit:.2f}%")
                         except Exception as e:
                             send_telegram(f"❌ Erreur place_order : {e}")
