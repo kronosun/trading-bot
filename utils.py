@@ -87,8 +87,8 @@ def format_signal_explanation(df):
     return f"""
 📊 Analyse des moyennes mobiles :
 
-- EMA20 (court terme) : {ema20:.2f}
-- EMA50 (long terme) : {ema50:.2f}
+- EMA20 (court terme) : {latest['EMA20']:.2f}
+- EMA50 (long terme) : {latest['EMA50']:.2f}
 
 {tendance}
 {interpretation}
