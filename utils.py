@@ -56,14 +56,10 @@ def decide_trade(df):
     emv_threshold = float(os.getenv("EMV_THRESHOLD", 0))
 
     latest = df.iloc[-1]
-    rsi = round(latest['RSI'], 2)
-    ema20 = latest['EMA20']
-    ema50 = latest['EMA50']
-    emv = round(latest['EMV'], 4)
 
-    if rsi < rsi_oversold and ema20 > ema50 and emv > emv_threshold:
+    if latest['RSI'] < rsi_oversold and latest['EMA20'] > latest['EMA50'] and latest['EMV'] > emv_threshold:
         return 'long'
-    elif rsi > rsi_overbought and ema20 < ema50 and emv < -emv_threshold:
+    elif latest['RSI'] > rsi_overbought and latest['EMA20'] < latest['EMA50'] and latest['EMV'] < emv_threshold:
         return 'short'
     else:
         return None
@@ -74,22 +70,18 @@ def format_signal_explanation(df):
     emv_threshold = float(os.getenv("EMV_THRESHOLD", 0))
 
     latest = df.iloc[-1]
-    rsi = round(latest['RSI'], 2)
-    ema20 = latest['EMA20']
-    ema50 = latest['EMA50']
-    emv = round(latest['EMV'], 4)
 
     tendance = ""
     interpretation = ""
 
-    if rsi < rsi_oversold and ema20 > ema50 and emv > emv_threshold:
+    if latest['RSI'] < rsi_oversold and latest['EMA20'] > latest['EMA50'] and latest['EMV'] > emv_threshold:
         tendance = "📈 La moyenne mobile courte (EMA20) est au-dessus de la longue (EMA50)."
         interpretation = "Cela indique une dynamique haussière. Le bot pourrait envisager une position LONG (achat)."
-    elif rsi > rsi_overbought and ema20 < ema50 and emv < -emv_threshold:
+    elif latest['RSI'] > rsi_overbought and latest['EMA20'] < latest['EMA50'] and latest['EMV'] < emv_threshold:
         tendance = "📉 La moyenne mobile courte (EMA20) est en dessous de la longue (EMA50)."
         interpretation = "Cela reflète une dynamique baissière. Le bot pourrait envisager une position SHORT (vente)."
     else:
-        tendance = "➖ Les deux moyennes sont égales."
+        tendance = "➖ Les indicateurs sont mitigés."
         interpretation = "Il n'y a pas de signal clair. Le bot reste en attente."
 
     return f"""
