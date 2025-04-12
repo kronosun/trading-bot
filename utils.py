@@ -88,6 +88,7 @@ def format_signal_explanation(df):
 def place_order(direction):
     try:
         balance = exchange.fetch_balance()
+        send_telegram(f"[DEBUG] Balance = {balance}")
         usdt_balance = balance['free']['USDT']
         leverage = int(os.getenv("LEVERAGE", 9))
         trade_amount_usdt = float(os.getenv("TRADE_AMOUNT", 100))
