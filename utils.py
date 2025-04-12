@@ -79,7 +79,6 @@ def format_signal_explanation(df):
 - EMA20 : {latest['EMA20']:.2f}
 - EMA50 : {latest['EMA50']:.2f}
 - RSI : {latest['RSI']:.2f}
-- EMV : {latest['EMV']:.2f}
 
 {tendance}
 {interpretation}
