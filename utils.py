@@ -14,10 +14,13 @@ TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 exchange = ccxt.coinex({
     'apiKey': API_KEY,
     'secret': API_SECRET,
-    'enableRateLimit': True
+    'enableRateLimit': True,
+    'options': {
+        'defaultType': 'swap'
+    }
 })
 
-symbol = 'BTC/USDT'
+symbol = 'BTC/USDT:USDT'
 leverage = int(os.getenv("LEVERAGE", 9))
 usdt_amount = os.getenv("TRADE_AMOUNT", 100)
 timeframe = os.getenv("TIMEFRAME", "1h")
