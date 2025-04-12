@@ -45,29 +45,27 @@ def calculate_indicators(df):
     return df
 
 def decide_trade(df):
-    rsi_oversold = int(os.getenv("RSI_OVERSOLD", 30))
-    rsi_overbought = int(os.getenv("RSI_OVERBOUGHT", 70))
-
     latest = df.iloc[-1]
+    rsi_oversold = int(os.getenv("RSI_OVERSOLD", 40))
+    rsi_overbought = int(os.getenv("RSI_OVERBOUGHT", 60))
 
-    if latest['EMA20'] > latest['EMA50'] and latest['RSI'] < rsi_oversold:
+    if latest['RSI'] < rsi_oversold:
         return 'long'
-    elif latest['EMA20'] < latest['EMA50'] and latest['RSI'] > rsi_overbought:
+    elif latest['RSI'] > rsi_overbought:
         return 'short'
-    else:
-        return None
+    return None
 
 
 def format_signal_explanation(df):
-    rsi_oversold = int(os.getenv("RSI_OVERSOLD", 30))
-    rsi_overbought = int(os.getenv("RSI_OVERBOUGHT", 70))
+    rsi_oversold = int(os.getenv("RSI_OVERSOLD", 40))
+    rsi_overbought = int(os.getenv("RSI_OVERBOUGHT", 60))
     latest = df.iloc[-1]
 
-    if latest['EMA20'] > latest['EMA50'] and latest['RSI'] < rsi_oversold:
-        tendance = "📈 EMA20 > EMA50"
+    if latest['RSI'] < rsi_oversold:
+        tendance = "📈 RSI < 40"
         interpretation = "Tendance haussière possible. Signal LONG."
-    elif latest['EMA20'] < latest['EMA50'] and latest['RSI'] > rsi_overbought:
-        tendance = "📉 EMA20 < EMA50"
+    elif latest['RSI'] > rsi_overbought:
+        tendance = "📉 RSI > 60"
         interpretation = "Tendance baissière possible. Signal SHORT."
     else:
         tendance = "➖ Pas de tendance claire."
