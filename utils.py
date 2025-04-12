@@ -57,6 +57,7 @@ def decide_trade(df):
     else:
         return None
 
+
 def format_signal_explanation(df):
     rsi_oversold = int(os.getenv("RSI_OVERSOLD", 30))
     rsi_overbought = int(os.getenv("RSI_OVERBOUGHT", 70))
@@ -78,6 +79,7 @@ def format_signal_explanation(df):
 - EMA20 : {latest['EMA20']:.2f}
 - EMA50 : {latest['EMA50']:.2f}
 - RSI : {latest['RSI']:.2f}
+- EMV : {latest['EMV']:.2f}
 
 {tendance}
 {interpretation}
