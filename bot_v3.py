@@ -124,8 +124,8 @@ def run_bot():
                                 send_telegram("⚠️ Le trade n’a pas été exécuté. Passage au cycle suivant.")
                             else:
                                 send_telegram(f"Trade {direction.upper()} exécuté à {entry_price}")
-                                TP = float(os.getenv("TAKE_PROFIT", 0.02))
-                                SL = float(os.getenv("STOP_LOSS", 0.01))
+                                TP = float(os.getenv("TAKE_PROFIT", 0.0125))
+                                SL = float(os.getenv("STOP_LOSS", 0.0075))
 
                                 for _ in range(60):  # 60 minutes
                                     time.sleep(60)
