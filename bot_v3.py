@@ -11,8 +11,7 @@ def balance_command(update: Update, context: CallbackContext):
     try:
         balance = exchange.fetch_balance()
         usdt_balance = balance['total'].get('USDT', 0)
-        send_telegram(f"[DEBUG] Balance = {balance}")
-        update.message.reply_text(f"💰 Balance USDT : {usdt_balance:.2f}")
+        update.message.reply_text(f"💰 Balance USDT : {usdt_balance:.2f}\n\n [DEBUG] Balance -> {balance}")
     except Exception as e:
         update.message.reply_text(f"Erreur dans /balance : {e}")
 
