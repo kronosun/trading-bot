@@ -49,8 +49,8 @@ def calculate_indicators(df):
 
 def decide_trade(df):
     latest = df.iloc[-1]
-    rsi_oversold = int(os.getenv("RSI_OVERSOLD", 40))
-    rsi_overbought = int(os.getenv("RSI_OVERBOUGHT", 60))
+    rsi_oversold = int(os.getenv("RSI_OVERSOLD", 45))
+    rsi_overbought = int(os.getenv("RSI_OVERBOUGHT", 65))
 
     if latest['RSI'] < rsi_oversold:
         return 'long'
@@ -60,15 +60,15 @@ def decide_trade(df):
 
 
 def format_signal_explanation(df):
-    rsi_oversold = int(os.getenv("RSI_OVERSOLD", 40))
-    rsi_overbought = int(os.getenv("RSI_OVERBOUGHT", 60))
+    rsi_oversold = int(os.getenv("RSI_OVERSOLD", 45))
+    rsi_overbought = int(os.getenv("RSI_OVERBOUGHT", 65))
     latest = df.iloc[-1]
 
     if latest['RSI'] < rsi_oversold:
-        tendance = "📈 RSI < 40"
+        tendance = "📈 RSI < 45"
         interpretation = "Tendance haussière possible. Signal LONG."
     elif latest['RSI'] > rsi_overbought:
-        tendance = "📉 RSI > 60"
+        tendance = "📉 RSI > 65"
         interpretation = "Tendance baissière possible. Signal SHORT."
     else:
         tendance = "➖ Pas de tendance claire."
