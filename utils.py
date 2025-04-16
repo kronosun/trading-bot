@@ -49,12 +49,12 @@ def calculate_indicators(df):
 def decide_trade(df):
     rsi_oversold = int(os.getenv("RSI_OVERSOLD", 45))
     rsi_overbought = int(os.getenv("RSI_OVERBOUGHT", 65))
-
     latest = df.iloc[-1]
+    rsi = latest['RSI']
 
-    if latest['EMA20'] > latest['EMA50'] and latest['RSI'] < rsi_oversold:
+    if rsi < rsi_oversold:
         return 'long'
-    elif latest['EMA20'] < latest['EMA50'] and latest['RSI'] > rsi_overbought:
+    elif rsi > rsi_overbought:
         return 'short'
     else:
         return None
@@ -68,31 +68,29 @@ def format_signal_explanation(df):
     ema20 = latest['EMA20']
     ema50 = latest['EMA50']
 
-    if ema20 > ema50 and rsi < rsi_oversold:
-        tendance = f"📈 EMA20 > EMA50 et RSI ({rsi:.2f}) < {rsi_oversold}"
-        interpretation = "Tendance haussière possible. Signal LONG."
-    elif ema20 < ema50 and rsi > rsi_overbought:
-        tendance = f"📉 EMA20 < EMA50 et RSI ({rsi:.2f}) > {rsi_overbought}"
-        interpretation = "Tendance baissière possible. Signal SHORT."
+    if rsi < rsi_oversold:
+        interpretation = f"RSI ({rsi:.2f}) < {rsi_oversold} → Signal LONG"
+        tendance = "📈 Tendance haussière anticipée suite à une situation de survente."
+    elif rsi > rsi_overbought:
+        interpretation = f"RSI ({rsi:.2f}) > {rsi_overbought} → Signal SHORT"
+        tendance = "📉 Tendance baissière anticipée suite à une situation de surachat."
     else:
-        if rsi < rsi_oversold:
-            rsi_info = f"RSI ({rsi:.2f}) < {rsi_oversold}"
-        elif rsi > rsi_overbought:
-            rsi_info = f"RSI ({rsi:.2f}) > {rsi_overbought}"
-        else:
-            rsi_info = f"RSI ({rsi:.2f}) dans la zone neutre"
-        tendance = f"➖ Pas de croisement EMA clair. {rsi_info}"
-        interpretation = "Pas de signal."
+        interpretation = f"RSI ({rsi:.2f}) entre {rsi_oversold} et {rsi_overbought} → Aucun signal"
+        tendance = "➖ Marché neutre, aucune tendance claire détectée."
+
+    explication = "ℹ️ Le RSI (Relative Strength Index) est un indicateur de momentum. Un RSI bas (< oversold) indique un actif survendu (potentiel rebond), un RSI élevé (> overbought) indique un actif suracheté (potentielle baisse)."
 
     return f"""
-📊 Analyse des moyennes mobiles :
+📊 Analyse technique (RSI uniquement) :
 
 - EMA20 : {ema20:.2f}
 - EMA50 : {ema50:.2f}
 - RSI : {rsi:.2f}
 
-{tendance}
 {interpretation}
+{tendance}
+
+{explication}
 """
 
 def place_order(direction):
@@ -122,11 +120,9 @@ def place_order(direction):
 
         send_telegram(f"📌 Nouvelle position {direction.upper()} ouverte\n\nPrix d'entrée : {entry_price} USDT\nQuantité : {qty:.6f} BTC\nTP : {tp} USDT\nSL : {sl} USDT\nEffet de levier : x{leverage}\n\n🎯 Gain potentiel : {est_gain:.2f} USDT\n🛑 Risque max : {est_loss:.2f} USDT")
 
-        # Log complet CSV
         with open("positions_log.csv", "a") as f:
             f.write(f"{datetime.datetime.now()},{direction},{entry_price},{qty:.6f},{tp},{sl},{est_gain:.2f},{est_loss:.2f}\n")
 
-        # Mise à jour du fichier pour /status
         with open(".last_trade", "w") as f:
             f.write(str(datetime.datetime.now()))
 
@@ -159,3 +155,4 @@ def log_trade(direction, entry_price, profit):
     with open("trades_log.csv", "a") as file:
         line = f"{datetime.datetime.now()},{direction},{entry_price},{round(profit*100, 2)}%\n"
         file.write(line)
+        
