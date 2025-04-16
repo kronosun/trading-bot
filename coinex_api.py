@@ -8,8 +8,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-API_KEY = os.getenv("API_KEY")
-API_SECRET = os.getenv("API_SECRET")
+API_KEY = os.getenv("COINEX_API_KEY")
+API_SECRET = os.getenv("COINEX_API_SECRET")
 BASE_URL = "https://api.coinex.com/v2"
 MARKET = os.getenv("MARKET", "BTCUSDT")
 TAKE_PROFIT = float(os.getenv("TAKE_PROFIT", 0.015))
@@ -74,8 +74,10 @@ def get_index_price():
     try:
         r = requests.get(f"{BASE_URL}/futures/market_ticker?market={MARKET}")
         data = r.json()
-        return float(data['data']['index_price'])
-    except:
+        price = float(data['data']['index_price'])
+        return price
+    except Exception as e:
+        send_telegram(f"⚠️ Erreur récupération prix index : {e}\nRéponse brute : {r.text if 'r' in locals() else 'N/A'}")
         return None
 
 
@@ -85,7 +87,6 @@ def adjust_amount_for_market(direction: str, desired_usdt: float):
         send_telegram("⚠️ Impossible de récupérer le prix d’index pour ajuster la position.")
         return None, None
 
-    # On tente plusieurs fois en divisant le montant à chaque fois si besoin
     for attempt in range(5):
         amount = desired_usdt / index_price
         test_order = {
@@ -104,7 +105,7 @@ def adjust_amount_for_market(direction: str, desired_usdt: float):
             send_telegram(f"✅ Position {direction.upper()} ouverte à {deal_price} (après ajustement)")
             return deal_price, amount
         elif "deviation" in response.get("message", ""):
-            desired_usdt *= 0.5  # on réduit l'exposition
+            desired_usdt *= 0.5
             continue
         else:
             send_telegram(f"❌ Erreur ouverture position : {response}")
