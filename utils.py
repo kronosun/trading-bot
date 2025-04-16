@@ -4,6 +4,8 @@ import requests
 import pandas as pd
 import datetime
 from dotenv import load_dotenv
+from coinex_api import adjust_amount_for_market, place_stop_orders_v2
+
 load_dotenv()
 
 API_KEY = os.getenv("API_KEY")
@@ -14,13 +16,10 @@ TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 exchange = ccxt.coinex({
     'apiKey': API_KEY,
     'secret': API_SECRET,
-    'enableRateLimit': True,
-    'options': {
-        'defaultType': 'swap'
-    }
+    'enableRateLimit': True
 })
 
-symbol = 'BTC/USDT:USDT'
+symbol = 'BTC/USDT'
 leverage = int(os.getenv("LEVERAGE", 9))
 usdt_amount = os.getenv("TRADE_AMOUNT", 100)
 timeframe = os.getenv("TIMEFRAME", "1h")
@@ -48,38 +47,50 @@ def calculate_indicators(df):
     return df
 
 def decide_trade(df):
-    latest = df.iloc[-1]
     rsi_oversold = int(os.getenv("RSI_OVERSOLD", 45))
     rsi_overbought = int(os.getenv("RSI_OVERBOUGHT", 65))
 
-    if latest['RSI'] < rsi_oversold:
-        return 'long'
-    elif latest['RSI'] > rsi_overbought:
-        return 'short'
-    return None
+    latest = df.iloc[-1]
 
+    if latest['EMA20'] > latest['EMA50'] and latest['RSI'] < rsi_oversold:
+        return 'long'
+    elif latest['EMA20'] < latest['EMA50'] and latest['RSI'] > rsi_overbought:
+        return 'short'
+    else:
+        return None
 
 def format_signal_explanation(df):
     rsi_oversold = int(os.getenv("RSI_OVERSOLD", 45))
     rsi_overbought = int(os.getenv("RSI_OVERBOUGHT", 65))
     latest = df.iloc[-1]
 
-    if latest['RSI'] < rsi_oversold:
-        tendance = "📈 RSI < 45"
+    rsi = latest['RSI']
+    ema20 = latest['EMA20']
+    ema50 = latest['EMA50']
+
+    # Détection du signal
+    if ema20 > ema50 and rsi < rsi_oversold:
+        tendance = f"📈 EMA20 > EMA50 et RSI ({rsi:.2f}) < {rsi_oversold}"
         interpretation = "Tendance haussière possible. Signal LONG."
-    elif latest['RSI'] > rsi_overbought:
-        tendance = "📉 RSI > 65"
+    elif ema20 < ema50 and rsi > rsi_overbought:
+        tendance = f"📉 EMA20 < EMA50 et RSI ({rsi:.2f}) > {rsi_overbought}"
         interpretation = "Tendance baissière possible. Signal SHORT."
     else:
-        tendance = "➖ Pas de tendance claire."
+        if rsi < rsi_oversold:
+            rsi_info = f"RSI ({rsi:.2f}) < {rsi_oversold}"
+        elif rsi > rsi_overbought:
+            rsi_info = f"RSI ({rsi:.2f}) > {rsi_overbought}"
+        else:
+            rsi_info = f"RSI ({rsi:.2f}) dans la zone neutre"
+        tendance = f"➖ Pas de croisement EMA clair. {rsi_info}"
         interpretation = "Pas de signal."
 
     return f"""
 📊 Analyse des moyennes mobiles :
 
-- EMA20 : {latest['EMA20']:.2f}
-- EMA50 : {latest['EMA50']:.2f}
-- RSI : {latest['RSI']:.2f}
+- EMA20 : {ema20:.2f}
+- EMA50 : {ema50:.2f}
+- RSI : {rsi:.2f}
 
 {tendance}
 {interpretation}
@@ -88,27 +99,31 @@ def format_signal_explanation(df):
 def place_order(direction):
     try:
         balance = exchange.fetch_balance()
-        send_telegram(f"[DEBUG] Balance = {balance}")
-        usdt_balance = balance['free']['USDT']
-        leverage = int(os.getenv("LEVERAGE", 9))
+        usdt_balance = balance['USDT']['free']
+        leverage = int(os.getenv("LEVERAGE", 8))
         trade_amount_usdt = float(os.getenv("TRADE_AMOUNT", 100))
         amount_usdt = min(usdt_balance, trade_amount_usdt)
 
-        market_price = exchange.fetch_ticker(symbol)['last']
-        qty = amount_usdt / market_price
-        params = {'leverage': leverage}
-        send_telegram("📤 Place Order [REEL]")
+        entry_price, qty = adjust_amount_for_market(direction, amount_usdt)
+        if not entry_price or not qty:
+            return None, None
 
-        if direction == 'long':
-            send_telegram("ℹ️ LONG Buy Order")
-            exchange.options['createMarketBuyOrderRequiresPrice'] = False
-            exchange.create_order(symbol, 'market', 'buy', amount_usdt, None, params)
-        else:
-            send_telegram("ℹ️ SHORT Sell Order")
-            exchange.create_market_sell_order(symbol, qty, params)
+        result = place_stop_orders_v2(direction, entry_price, qty)
+        for label, code, body in result:
+            send_telegram(f"📋 {label} => HTTP {code}: {body}")
 
-        send_telegram(f"{direction.upper()} position ouverte à {market_price}")
-        return market_price, direction
+        tp_ratio = float(os.getenv("TAKE_PROFIT", 0.015))
+        sl_ratio = float(os.getenv("STOP_LOSS", 0.0075))
+
+        tp = round(entry_price * (1 + tp_ratio), 2) if direction == 'long' else round(entry_price * (1 - tp_ratio), 2)
+        sl = round(entry_price * (1 - sl_ratio), 2) if direction == 'long' else round(entry_price * (1 + sl_ratio), 2)
+
+        est_gain = abs(tp - entry_price) * qty
+        est_loss = abs(entry_price - sl) * qty
+
+        send_telegram(f"📌 Nouvelle position {direction.upper()} ouverte\n\nPrix d'entrée : {entry_price} USDT\nQuantité : {qty:.6f} BTC\nTP : {tp} USDT\nSL : {sl} USDT\nEffet de levier : x{leverage}\n\n🎯 Gain potentiel : {est_gain:.2f} USDT\n🛑 Risque max : {est_loss:.2f} USDT")
+
+        return entry_price, direction
 
     except Exception as e:
         send_telegram(f"❌ Erreur place_order : {e}")
@@ -132,19 +147,6 @@ def close_position(direction):
             send_telegram("⚠️ Aucune position trouvée.")
     except Exception as e:
         send_telegram(f"❌ Erreur close_position : {e}")
-
-def check_profit(entry_price, direction):
-    try:
-        current_price = exchange.fetch_ticker(symbol)['last']
-        send_telegram(f"Prix actuel : {current_price}")
-
-        if direction == 'long':
-            return (current_price - entry_price) / entry_price
-        else:
-            return (entry_price - current_price) / entry_price
-    except Exception as e:
-        send_telegram(f"[ERREUR] check_profit: {e}")
-        return 0
 
 def log_trade(direction, entry_price, profit):
     with open("trades_log.csv", "a") as file:
