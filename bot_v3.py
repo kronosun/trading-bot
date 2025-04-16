@@ -110,7 +110,7 @@ def run_bot():
         return
 
     create_lock()
-    send_telegram("🤖 BOT V3 lancé en mode daemon.")
+    send_telegram("🤖 Futures Trading Bot - Exécution...")
 
     try:
         while True:
