@@ -1,6 +1,4 @@
 import time
-import hashlib
-import hmac
 import json
 import requests
 import os
@@ -11,14 +9,18 @@ load_dotenv()
 
 API_KEY = os.getenv("API_KEY")
 API_SECRET = os.getenv("API_SECRET")
-BASE_URL = "https://api.coinex.com/v2"
 MARKET = os.getenv("MARKET", "BTCUSDT")
 TAKE_PROFIT = float(os.getenv("TAKE_PROFIT", 0.015))
 STOP_LOSS = float(os.getenv("STOP_LOSS", 0.0075))
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
-ccxt_exchange = ccxt.coinex({"apiKey": API_KEY, "secret": API_SECRET})
+ccxt_exchange = ccxt.coinex({
+    'apiKey': API_KEY,
+    'secret': API_SECRET,
+    'enableRateLimit': True,
+    'options': {'defaultType': 'swap'}
+})
 
 
 def send_telegram(msg):
@@ -27,49 +29,39 @@ def send_telegram(msg):
     requests.post(url, data=data)
 
 
-def generate_signature(req_time, params_str):
-    to_sign = str(req_time) + params_str
-    return hmac.new(API_SECRET.encode(), to_sign.encode(), hashlib.sha256).hexdigest()
-
-
-def headers_with_signature(params):
-    req_time = str(int(time.time() * 1000))
-    params_str = json.dumps(params, separators=(',', ':'), ensure_ascii=False)
-    signature = generate_signature(req_time, params_str)
-    headers = {
-        "Content-Type": "application/json",
-        "X-CoinEX-Key": API_KEY,
-        "X-CoinEX-Sign": signature,
-        "X-CoinEX-Timestamp": req_time
-    }
-    return headers
-
-
 def place_stop_orders_v2(direction: str, entry_price: float, amount: float):
     try:
         tp_price = round(entry_price * (1 + TAKE_PROFIT), 2) if direction == 'long' else round(entry_price * (1 - TAKE_PROFIT), 2)
         sl_price = round(entry_price * (1 - STOP_LOSS), 2) if direction == 'long' else round(entry_price * (1 + STOP_LOSS), 2)
 
-        results = []
+        symbol = 'BTC/USDT:USDT'
+        side = 'sell' if direction == 'long' else 'buy'
+        stop_orders = []
 
-        for label, price, t_type in [("TP", tp_price, "take_profit"), ("SL", sl_price, "stop_loss")]:
-            stop_order = {
-                "market": MARKET,
-                "side": "sell" if direction == "long" else "buy",
-                "amount": str(amount),
-                "stop_type": t_type,
-                "stop_price": str(price),
-                "order_type": "market",
-                "position_id": 0
-            }
-            headers = headers_with_signature(stop_order)
-            r = requests.post(f"{BASE_URL}/futures/put_stop_order", headers=headers, data=json.dumps(stop_order))
-            results.append((label, r.status_code, r.text))
+        # TP
+        tp_params = {
+            'stopPrice': tp_price,
+            'triggerPrice': tp_price,
+            'reduceOnly': True,
+            'type': 'market'
+        }
+        order_tp = ccxt_exchange.create_order(symbol, 'market', side, amount, None, tp_params)
+        stop_orders.append(('TP', 200, str(order_tp)))
 
-        return results
+        # SL
+        sl_params = {
+            'stopPrice': sl_price,
+            'triggerPrice': sl_price,
+            'reduceOnly': True,
+            'type': 'market'
+        }
+        order_sl = ccxt_exchange.create_order(symbol, 'market', side, amount, None, sl_params)
+        stop_orders.append(('SL', 200, str(order_sl)))
+
+        return stop_orders
 
     except Exception as e:
-        send_telegram(f"❌ Erreur API v2 CoinEx : {e}")
+        send_telegram(f"❌ Erreur lors de la création des ordres TP/SL via CCXT : {e}")
         return [("ERROR", 500, str(e))]
 
 
@@ -90,29 +82,14 @@ def adjust_amount_for_market(direction: str, desired_usdt: float):
         send_telegram("⚠️ Impossible de récupérer le prix d’index pour ajuster la position.")
         return None, None
 
-    for attempt in range(5):
+    try:
+        symbol = 'BTC/USDT:USDT'
         amount = desired_usdt / index_price
-        test_order = {
-            "market": MARKET,
-            "side": "buy" if direction == "long" else "sell",
-            "amount": str(amount),
-            "order_type": "market",
-            "position_id": 0
-        }
-        headers = headers_with_signature(test_order)
-        r = requests.post(f"{BASE_URL}/futures/put_order", headers=headers, data=json.dumps(test_order))
-        response = r.json()
-
-        if response['code'] == 0:
-            deal_price = float(response['data']['deal_price'])
-            send_telegram(f"✅ Position {direction.upper()} ouverte à {deal_price} (après ajustement)")
-            return deal_price, amount
-        elif "deviation" in response.get("message", ""):
-            desired_usdt *= 0.5
-            continue
-        else:
-            send_telegram(f"❌ Erreur ouverture position : {response}")
-            return None, None
-
-    send_telegram("🚫 Impossible d’ouvrir une position sans dépasser la limite de 1% d’écart.")
-    return None, None
+        side = 'buy' if direction == 'long' else 'sell'
+        order = ccxt_exchange.create_market_order(symbol, side, amount, params={'reduceOnly': False})
+        deal_price = float(order['average']) if order.get('average') else index_price
+        send_telegram(f"✅ Position {direction.upper()} ouverte à {deal_price:.2f} USDT (via CCXT)")
+        return deal_price, amount
+    except Exception as e:
+        send_telegram(f"❌ Erreur ouverture position : {e}")
+        return None, None
