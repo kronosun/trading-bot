@@ -1,116 +1,114 @@
 import time
-import hmac
 import hashlib
+import hmac
+import json
 import requests
 import os
 from dotenv import load_dotenv
 
 load_dotenv()
 
-API_KEY = os.getenv("COINEX_API_KEY")
-API_SECRET = os.getenv("COINEX_API_SECRET")
-API_BASE = "https://api.coinex.com/v1"
+API_KEY = os.getenv("API_KEY")
+API_SECRET = os.getenv("API_SECRET")
+BASE_URL = "https://api.coinex.com/v2"
 MARKET = os.getenv("MARKET", "BTCUSDT")
 TAKE_PROFIT = float(os.getenv("TAKE_PROFIT", 0.015))
 STOP_LOSS = float(os.getenv("STOP_LOSS", 0.0075))
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
+
 def send_telegram(msg):
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
     data = {"chat_id": TELEGRAM_CHAT_ID, "text": msg}
     requests.post(url, data=data)
 
-def sign(params: dict) -> dict:
-    params['access_id'] = API_KEY
-    params['tonce'] = str(int(time.time() * 1000))
-    sorted_params = sorted(params.items())
-    query = "&".join([f"{k}={v}" for k, v in sorted_params])
-    sign_str = query + f"&secret_key={API_SECRET}"
-    signature = hashlib.md5(sign_str.encode()).hexdigest().upper()
-    headers = {
-        "Authorization": signature,
-        "Content-Type": "application/json"
-    }
-    return headers, params
 
-def place_tp_sl(direction: str, entry_price: float, amount: float):
+def generate_signature(req_time, params_str):
+    to_sign = str(req_time) + params_str
+    return hmac.new(API_SECRET.encode(), to_sign.encode(), hashlib.sha256).hexdigest()
+
+
+def headers_with_signature(params):
+    req_time = str(int(time.time() * 1000))
+    params_str = json.dumps(params, separators=(',', ':'), ensure_ascii=False)
+    signature = generate_signature(req_time, params_str)
+    headers = {
+        "Content-Type": "application/json",
+        "X-CoinEX-Key": API_KEY,
+        "X-CoinEX-Sign": signature,
+        "X-CoinEX-Timestamp": req_time
+    }
+    return headers
+
+
+def place_stop_orders_v2(direction: str, entry_price: float, amount: float):
     try:
-        headers = {}
+        tp_price = round(entry_price * (1 + TAKE_PROFIT), 2) if direction == 'long' else round(entry_price * (1 - TAKE_PROFIT), 2)
+        sl_price = round(entry_price * (1 - STOP_LOSS), 2) if direction == 'long' else round(entry_price * (1 + STOP_LOSS), 2)
+
         results = []
 
-        if direction == 'long':
-            tp_price = round(entry_price * (1 + TAKE_PROFIT), 2)
-            sl_price = round(entry_price * (1 - STOP_LOSS), 2)
-            tp_type = 'sell'
-            sl_type = 'sell'
-        else:
-            tp_price = round(entry_price * (1 - TAKE_PROFIT), 2)
-            sl_price = round(entry_price * (1 + STOP_LOSS), 2)
-            tp_type = 'buy'
-            sl_type = 'buy'
-
-        timestamp = int(time.time())
-        tp_id = f"tp_{timestamp}"
-        sl_id = f"sl_{timestamp}"
-
-        # Take Profit (limit order)
-        tp_params = {
-            "market": MARKET,
-            "type": tp_type,
-            "amount": amount,
-            "price": tp_price,
-            "client_id": tp_id
-        }
-        headers, signed_tp = sign(tp_params)
-        r1 = requests.post(f"{API_BASE}/order/limit", json=signed_tp, headers=headers)
-        results.append(("TP", r1.status_code, r1.text))
-
-        # Stop Loss (stop market order)
-        sl_params = {
-            "market": MARKET,
-            "type": sl_type,
-            "amount": amount,
-            "stop_price": sl_price,
-            "stop_type": "loss",
-            "client_id": sl_id
-        }
-        headers, signed_sl = sign(sl_params)
-        r2 = requests.post(f"{API_BASE}/order/stop/market", json=signed_sl, headers=headers)
-        results.append(("SL", r2.status_code, r2.text))
-
-        # Lancer la surveillance
-        threading.Thread(target=monitor_tp_sl, args=(tp_id, sl_id)).start()
+        for label, price, t_type in [("TP", tp_price, "take_profit"), ("SL", sl_price, "stop_loss")]:
+            stop_order = {
+                "market": MARKET,
+                "side": "sell" if direction == "long" else "buy",
+                "amount": str(amount),
+                "stop_type": t_type,
+                "stop_price": str(price),
+                "order_type": "market",
+                "position_id": 0
+            }
+            headers = headers_with_signature(stop_order)
+            r = requests.post(f"{BASE_URL}/futures/put_stop_order", headers=headers, data=json.dumps(stop_order))
+            results.append((label, r.status_code, r.text))
 
         return results
 
     except Exception as e:
+        send_telegram(f"❌ Erreur API v2 CoinEx : {e}")
         return [("ERROR", 500, str(e))]
 
-import threading
 
-def monitor_tp_sl(tp_id: str, sl_id: str):
+def get_index_price():
     try:
-        while True:
-            time.sleep(10)
-            for client_id in [tp_id, sl_id]:
-                headers, _ = sign({})
-                r = requests.get(f"{API_BASE}/order/status?market={MARKET}&client_id={client_id}", headers=headers)
-                if r.status_code == 200:
-                    data = r.json()
-                    if data['code'] == 0 and data['data']['status'] == 'done':
-                        label = "Take Profit" if client_id.startswith("tp") else "Stop Loss"
-                        executed_price = data['data']['deal_price']
-                        send_telegram(f"✅ {label} exécuté à {executed_price} USDT")
-                        cancel_other = sl_id if client_id == tp_id else tp_id
-                        cancel_order(cancel_other)
-                        return
-    except Exception as e:
-        send_telegram(f"❌ Erreur dans monitor_tp_sl: {e}")
+        r = requests.get(f"{BASE_URL}/futures/market_ticker?market={MARKET}")
+        data = r.json()
+        return float(data['data']['index_price'])
+    except:
+        return None
 
-def cancel_order(client_id: str):
-    try:
-        headers, signed = sign({"market": MARKET, "client_id": client_id})
-        requests.delete(f"{API_BASE}/order/pending", headers=headers, params=signed)
-    except Exception as e:
-        send_telegram(f"⚠️ Erreur annulation {client_id} : {e}")
+
+def adjust_amount_for_market(direction: str, desired_usdt: float):
+    index_price = get_index_price()
+    if not index_price:
+        send_telegram("⚠️ Impossible de récupérer le prix d’index pour ajuster la position.")
+        return None, None
+
+    # On tente plusieurs fois en divisant le montant à chaque fois si besoin
+    for attempt in range(5):
+        amount = desired_usdt / index_price
+        test_order = {
+            "market": MARKET,
+            "side": "buy" if direction == "long" else "sell",
+            "amount": str(amount),
+            "order_type": "market",
+            "position_id": 0
+        }
+        headers = headers_with_signature(test_order)
+        r = requests.post(f"{BASE_URL}/futures/put_order", headers=headers, data=json.dumps(test_order))
+        response = r.json()
+
+        if response['code'] == 0:
+            deal_price = float(response['data']['deal_price'])
+            send_telegram(f"✅ Position {direction.upper()} ouverte à {deal_price} (après ajustement)")
+            return deal_price, amount
+        elif "deviation" in response.get("message", ""):
+            desired_usdt *= 0.5  # on réduit l'exposition
+            continue
+        else:
+            send_telegram(f"❌ Erreur ouverture position : {response}")
+            return None, None
+
+    send_telegram("🚫 Impossible d’ouvrir une position sans dépasser la limite de 1% d’écart.")
+    return None, None
