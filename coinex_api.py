@@ -4,18 +4,21 @@ import hmac
 import json
 import requests
 import os
+import ccxt
 from dotenv import load_dotenv
 
 load_dotenv()
 
-API_KEY = os.getenv("COINEX_API_KEY")
-API_SECRET = os.getenv("COINEX_API_SECRET")
+API_KEY = os.getenv("API_KEY")
+API_SECRET = os.getenv("API_SECRET")
 BASE_URL = "https://api.coinex.com/v2"
 MARKET = os.getenv("MARKET", "BTCUSDT")
 TAKE_PROFIT = float(os.getenv("TAKE_PROFIT", 0.015))
 STOP_LOSS = float(os.getenv("STOP_LOSS", 0.0075))
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+
+ccxt_exchange = ccxt.coinex({"apiKey": API_KEY, "secret": API_SECRET})
 
 
 def send_telegram(msg):
@@ -72,12 +75,12 @@ def place_stop_orders_v2(direction: str, entry_price: float, amount: float):
 
 def get_index_price():
     try:
-        r = requests.get(f"{BASE_URL}/futures/market_ticker?market={MARKET}")
-        data = r.json()
-        price = float(data['data']['index_price'])
-        return price
+        ticker = ccxt_exchange.fetch_ticker('BTC/USDT:USDT')
+        mark_price = float(ticker['info'].get('mark_price') or ticker['last'])
+        send_telegram(f"📈 Prix d’index actuel : {mark_price:.2f} USDT")
+        return mark_price
     except Exception as e:
-        send_telegram(f"⚠️ Erreur récupération prix index : {e}\nRéponse brute : {r.text if 'r' in locals() else 'N/A'}")
+        send_telegram(f"⚠️ Erreur récupération prix index : {e}")
         return None
 
 
