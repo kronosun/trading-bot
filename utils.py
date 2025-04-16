@@ -20,7 +20,7 @@ exchange = ccxt.coinex({
 })
 
 symbol = 'BTC/USDT'
-leverage = int(os.getenv("LEVERAGE", 8))
+leverage = int(os.getenv("LEVERAGE", 9))
 usdt_amount = os.getenv("TRADE_AMOUNT", 100)
 timeframe = os.getenv("TIMEFRAME", "1h")
 
@@ -96,8 +96,8 @@ def format_signal_explanation(df):
 def place_order(direction):
     try:
         balance = exchange.fetch_balance()
-        usdt_balance = balance['USDT']['free']
-        leverage = int(os.getenv("LEVERAGE", 9))
+        usdt_balance = balance['total'].get('USDT', 0)
+        leverage = int(os.getenv("LEVERAGE", 8))
         trade_amount_usdt = float(os.getenv("TRADE_AMOUNT", 100))
         amount_usdt = min(usdt_balance, trade_amount_usdt)
 
@@ -155,4 +155,3 @@ def log_trade(direction, entry_price, profit):
     with open("trades_log.csv", "a") as file:
         line = f"{datetime.datetime.now()},{direction},{entry_price},{round(profit*100, 2)}%\n"
         file.write(line)
-        
