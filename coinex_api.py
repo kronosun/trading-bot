@@ -3,6 +3,8 @@ import json
 import requests
 import os
 import ccxt
+import hashlib
+import hmac
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -14,6 +16,8 @@ TAKE_PROFIT = float(os.getenv("TAKE_PROFIT", 0.015))
 STOP_LOSS = float(os.getenv("STOP_LOSS", 0.0075))
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+
+BASE_URL = "https://api.coinex.com/v2"
 
 ccxt_exchange = ccxt.coinex({
     'apiKey': API_KEY,
@@ -29,39 +33,45 @@ def send_telegram(msg):
     requests.post(url, data=data)
 
 
+def sign_payload(payload):
+    req_time = str(int(time.time() * 1000))
+    payload_str = json.dumps(payload, separators=(',', ':'), ensure_ascii=False)
+    signature = hmac.new(API_SECRET.encode(), (req_time + payload_str).encode(), hashlib.sha256).hexdigest()
+    headers = {
+        "Content-Type": "application/json",
+        "X-CoinEX-Key": API_KEY,
+        "X-CoinEX-Sign": signature,
+        "X-CoinEX-Timestamp": req_time
+    }
+    return headers
+
+
 def place_stop_orders_v2(direction: str, entry_price: float, amount: float):
     try:
         tp_price = round(entry_price * (1 + TAKE_PROFIT), 2) if direction == 'long' else round(entry_price * (1 - TAKE_PROFIT), 2)
         sl_price = round(entry_price * (1 - STOP_LOSS), 2) if direction == 'long' else round(entry_price * (1 + STOP_LOSS), 2)
 
-        symbol = 'BTC/USDT:USDT'
         side = 'sell' if direction == 'long' else 'buy'
         stop_orders = []
 
-        # TP
-        tp_params = {
-            'stopPrice': tp_price,
-            'triggerPrice': tp_price,
-            'reduceOnly': True,
-            'type': 'market'
-        }
-        order_tp = ccxt_exchange.create_order(symbol, 'market', side, amount, None, tp_params)
-        stop_orders.append(('TP', 200, str(order_tp)))
-
-        # SL
-        sl_params = {
-            'stopPrice': sl_price,
-            'triggerPrice': sl_price,
-            'reduceOnly': True,
-            'type': 'market'
-        }
-        order_sl = ccxt_exchange.create_order(symbol, 'market', side, amount, None, sl_params)
-        stop_orders.append(('SL', 200, str(order_sl)))
+        for label, price, stop_type in [("TP", tp_price, "take_profit"), ("SL", sl_price, "stop_loss")]:
+            payload = {
+                "market": MARKET,
+                "side": side,
+                "amount": str(amount),
+                "stop_type": stop_type,
+                "stop_price": str(price),
+                "order_type": "market",
+                "position_id": 0
+            }
+            headers = sign_payload(payload)
+            r = requests.post(f"{BASE_URL}/futures/put_stop_order", headers=headers, data=json.dumps(payload))
+            stop_orders.append((label, r.status_code, r.text))
 
         return stop_orders
 
     except Exception as e:
-        send_telegram(f"❌ Erreur lors de la création des ordres TP/SL via CCXT : {e}")
+        send_telegram(f"❌ Erreur REST TP/SL : {e}")
         return [("ERROR", 500, str(e))]
 
 
