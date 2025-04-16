@@ -86,14 +86,13 @@ def adjust_amount_for_market(direction: str, desired_usdt: float):
         symbol = 'BTC/USDT:USDT'
         market = ccxt_exchange.market(symbol)
         raw_amount = desired_usdt / index_price
-        amount = float(ccxt_exchange.amount_to_precision(symbol, raw_amount))
-
-        # Vérifie la quantité minimale
         min_amount = float(market['limits']['amount']['min'])
-        if amount < min_amount:
-            send_telegram(f"🚫 Montant trop faible : {amount} BTC < min {min_amount} BTC. Trade ignoré.")
+
+        if raw_amount < min_amount:
+            send_telegram(f"🚫 Montant brut trop faible : {raw_amount:.8f} BTC < min {min_amount} BTC. Trade ignoré.")
             return None, None
 
+        amount = float(ccxt_exchange.amount_to_precision(symbol, raw_amount))
         side = 'buy' if direction == 'long' else 'sell'
         order = ccxt_exchange.create_market_order(symbol, side, amount, params={'reduceOnly': False})
         deal_price = float(order['average']) if order.get('average') else index_price
