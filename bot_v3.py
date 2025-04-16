@@ -9,7 +9,7 @@ from utils import (
     place_order, send_telegram, log_trade, format_signal_explanation,
     close_position, exchange
 )
-from coinex_api import place_tp_sl
+from coinex_api import place_stop_orders_v2
 
 LOCKFILE = "bot.lock"
 PAUSE_FILE = "bot.pause"
@@ -52,6 +52,16 @@ def restart_command(update: Update, context: CallbackContext):
     update.message.reply_text("♻️ Redémarrage du bot...")
     remove_lock()
     os.execv(sys.executable, [sys.executable] + sys.argv)
+
+def status_command(update: Update, context: CallbackContext):
+    paused = os.path.exists("bot.pause")
+    try:
+        with open(".last_trade", "r") as f:
+            last = f.read().strip()
+    except:
+        last = "aucun"
+    msg = f"🟡 Bot {'⏸️ en pause' if paused else '✅ actif'}\n📅 Dernier trade : {last}"
+    update.message.reply_text(msg)
 
 def balance_command(update: Update, context: CallbackContext):
     try:
@@ -110,7 +120,7 @@ def run_bot():
         return
 
     create_lock()
-    send_telegram("🤖 Futures Trading Bot - Exécution...")
+    send_telegram("🤖 BOT V3 lancé en mode daemon.")
 
     try:
         while True:
@@ -135,12 +145,6 @@ def run_bot():
                             entry_price, direction = place_order(signal)
                             if not entry_price or not direction:
                                 send_telegram("⚠️ Le trade n’a pas été exécuté.")
-                            else:
-                                qty = float(os.getenv("TRADE_AMOUNT", 100)) / entry_price
-                                send_telegram(f"📌 Position {direction.upper()} ouverte à {entry_price}")
-                                result = place_tp_sl(direction, entry_price, qty)
-                                for label, code, body in result:
-                                    send_telegram(f"📋 {label} => HTTP {code}: {body}")
                         except Exception as e:
                             send_telegram(f"❌ Erreur place_order : {e}")
                 else:
@@ -169,6 +173,7 @@ if __name__ == '__main__':
     dispatcher.add_handler(CommandHandler("stop", stop_command))
     dispatcher.add_handler(CommandHandler("pause", pause_command))
     dispatcher.add_handler(CommandHandler("resume", resume_command))
+    dispatcher.add_handler(CommandHandler("status", status_command))
 
     updater.start_polling()
 
