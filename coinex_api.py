@@ -76,13 +76,21 @@ def get_index_price():
         return None
 
 
-def adjust_amount_for_market(direction: str, desired_usdt: float):
+def adjust_amount_for_market(direction: str, desired_usdt_raw: float):
     index_price = get_index_price()
     if not index_price:
         send_telegram("⚠️ Impossible de récupérer le prix d’index pour ajuster la position.")
         return None, None
 
     try:
+        try:
+            desired_usdt = float(desired_usdt_raw)
+            if desired_usdt <= 0:
+                raise ValueError
+        except:
+            desired_usdt = 100
+            send_telegram("⚠️ TRADE_AMOUNT invalide. Valeur par défaut 100 USDT utilisée.")
+
         symbol = 'BTC/USDT:USDT'
         market = ccxt_exchange.market(symbol)
         raw_amount = desired_usdt / index_price
