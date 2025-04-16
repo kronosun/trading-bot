@@ -20,7 +20,7 @@ exchange = ccxt.coinex({
 })
 
 symbol = 'BTC/USDT'
-leverage = int(os.getenv("LEVERAGE", 9))
+leverage = int(os.getenv("LEVERAGE", 8))
 usdt_amount = os.getenv("TRADE_AMOUNT", 100)
 timeframe = os.getenv("TIMEFRAME", "1h")
 
@@ -68,7 +68,6 @@ def format_signal_explanation(df):
     ema20 = latest['EMA20']
     ema50 = latest['EMA50']
 
-    # Détection du signal
     if ema20 > ema50 and rsi < rsi_oversold:
         tendance = f"📈 EMA20 > EMA50 et RSI ({rsi:.2f}) < {rsi_oversold}"
         interpretation = "Tendance haussière possible. Signal LONG."
@@ -100,7 +99,7 @@ def place_order(direction):
     try:
         balance = exchange.fetch_balance()
         usdt_balance = balance['USDT']['free']
-        leverage = int(os.getenv("LEVERAGE", 8))
+        leverage = int(os.getenv("LEVERAGE", 9))
         trade_amount_usdt = float(os.getenv("TRADE_AMOUNT", 100))
         amount_usdt = min(usdt_balance, trade_amount_usdt)
 
@@ -122,6 +121,14 @@ def place_order(direction):
         est_loss = abs(entry_price - sl) * qty
 
         send_telegram(f"📌 Nouvelle position {direction.upper()} ouverte\n\nPrix d'entrée : {entry_price} USDT\nQuantité : {qty:.6f} BTC\nTP : {tp} USDT\nSL : {sl} USDT\nEffet de levier : x{leverage}\n\n🎯 Gain potentiel : {est_gain:.2f} USDT\n🛑 Risque max : {est_loss:.2f} USDT")
+
+        # Log complet CSV
+        with open("positions_log.csv", "a") as f:
+            f.write(f"{datetime.datetime.now()},{direction},{entry_price},{qty:.6f},{tp},{sl},{est_gain:.2f},{est_loss:.2f}\n")
+
+        # Mise à jour du fichier pour /status
+        with open(".last_trade", "w") as f:
+            f.write(str(datetime.datetime.now()))
 
         return entry_price, direction
 
