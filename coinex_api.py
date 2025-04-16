@@ -46,32 +46,42 @@ def sign_payload(payload):
     return headers
 
 
-def place_stop_orders_v2(direction: str, entry_price: float, amount: float):
+def set_tp_sl(direction: str, entry_price: float):
     try:
+        # Récupérer la position en cours
+        response = requests.get(f"{BASE_URL}/futures/pending-position?market={MARKET}&side={direction}",
+                                headers=sign_payload({}))
+        data = response.json()
+
+        if data['code'] != 0 or not data['data']:
+            send_telegram(f"⚠️ Impossible de récupérer la position ouverte : {data}")
+            return [("POSITION", response.status_code, response.text)]
+
+        position_id = data['data']['position_id']
+
         tp_price = round(entry_price * (1 + TAKE_PROFIT), 2) if direction == 'long' else round(entry_price * (1 - TAKE_PROFIT), 2)
         sl_price = round(entry_price * (1 - STOP_LOSS), 2) if direction == 'long' else round(entry_price * (1 + STOP_LOSS), 2)
 
-        side = 'sell' if direction == 'long' else 'buy'
-        stop_orders = []
+        # TP
+        tp_payload = {
+            "position_id": position_id,
+            "take_profit_price": str(tp_price)
+        }
+        tp_headers = sign_payload(tp_payload)
+        r_tp = requests.post(f"{BASE_URL}/futures/set-position-take-profit", headers=tp_headers, data=json.dumps(tp_payload))
 
-        for label, price, stop_type in [("TP", tp_price, "take_profit"), ("SL", sl_price, "stop_loss")]:
-            payload = {
-                "market": MARKET,
-                "side": side,
-                "amount": str(amount),
-                "stop_type": stop_type,
-                "stop_price": str(price),
-                "order_type": "market",
-                "position_id": 0
-            }
-            headers = sign_payload(payload)
-            r = requests.post(f"{BASE_URL}/futures/put_stop_order", headers=headers, data=json.dumps(payload))
-            stop_orders.append((label, r.status_code, r.text))
+        # SL
+        sl_payload = {
+            "position_id": position_id,
+            "stop_loss_price": str(sl_price)
+        }
+        sl_headers = sign_payload(sl_payload)
+        r_sl = requests.post(f"{BASE_URL}/futures/set-position-stop-loss", headers=sl_headers, data=json.dumps(sl_payload))
 
-        return stop_orders
+        return [("TP", r_tp.status_code, r_tp.text), ("SL", r_sl.status_code, r_sl.text)]
 
     except Exception as e:
-        send_telegram(f"❌ Erreur REST TP/SL : {e}")
+        send_telegram(f"❌ Erreur set_tp_sl : {e}")
         return [("ERROR", 500, str(e))]
 
 
