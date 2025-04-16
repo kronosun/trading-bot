@@ -66,8 +66,9 @@ def status_command(update: Update, context: CallbackContext):
 def balance_command(update: Update, context: CallbackContext):
     try:
         balance = exchange.fetch_balance()
-        usdt_balance = balance['total'].get('USDT', 0)
-        update.message.reply_text(f"💰 Balance USDT : {usdt_balance:.2f}")
+        usdt = balance['total'].get('USDT', 0)
+        btc = balance['total'].get('BTC', 0)
+        update.message.reply_text(f"💰 Solde :\n- USDT : {usdt:.2f}\n- BTC : {btc:.6f}")
     except Exception as e:
         update.message.reply_text(f"Erreur dans /balance : {e}")
 
@@ -145,6 +146,9 @@ def run_bot():
                             entry_price, direction = place_order(signal)
                             if not entry_price or not direction:
                                 send_telegram("⚠️ Le trade n’a pas été exécuté.")
+                            else:
+                                if entry_price == 0:
+                                    send_telegram("🚫 Solde insuffisant pour ouvrir une position.")
                         except Exception as e:
                             send_telegram(f"❌ Erreur place_order : {e}")
                 else:
